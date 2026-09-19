@@ -2,7 +2,7 @@
 # Cron wrapper. It refuses concurrent executions of the same source job.
 set -Eeuo pipefail
 
-readonly APP_DIR="/opt/threat-intel"
+readonly APP_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly ENV_FILE="/etc/threat-intel/threat-intel.env"
 readonly LOG_DIR="/var/log/threat-intel"
 readonly LOCK_DIR="/var/lock/threat-intel"

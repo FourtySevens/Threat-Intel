@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# Complete LXC bootstrap for Threat Intel. Run as root from /opt/threat-intel.
+set -Eeuo pipefail
+
+readonly APP_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly SERVICE_USER="ti"
+readonly SERVICE_GROUP="ti"
+readonly LOG_DIR="/var/log/threat-intel"
+readonly LOCK_DIR="/var/lock/threat-intel"
+
+initial_sync=true
+install_postgresql=true
+
+usage() {
+  cat <<'EOF'
+Usage: setup-and-start [options]
+
+Bootstraps a Debian/Ubuntu systemd LXC deployed at /opt/threat-intel:
+  - creates the ti service account and runtime directories
+  - installs PostgreSQL when needed and provisions its database/schema
+  - creates the Python virtual environment and installs dependencies
+  - installs/enables cron, log rotation, and the dashboard service
+  - performs an initial CISA KEV, NVD, and Krebs sync by default
+
+Options:
+  --no-initial-sync       Start services without downloading feeds now
+  --no-install-postgresql Fail if PostgreSQL is not already installed
+  -h, --help              Show this help text
+
+The database password is securely prompted for by setup-postgres. The script
+is idempotent; re-running it refreshes dependencies and service definitions.
+EOF
+}
+
+fail() {
+  echo "setup-and-start: $*" >&2
+  exit 1
+}
+
+while (($#)); do
+  case "$1" in
+    --no-initial-sync) initial_sync=false; shift ;;
+    --no-install-postgresql) install_postgresql=false; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "unknown option: $1 (run with --help)" ;;
+  esac
+done
+
+[[ $EUID -eq 0 ]] || fail "run this script as root"
+[[ "$APP_DIR" == "/opt/threat-intel" ]] || fail "deploy this repository at /opt/threat-intel before running the bootstrap"
+[[ -r "$APP_DIR/requirements.txt" ]] || fail "requirements.txt is missing from $APP_DIR"
+[[ -x "$APP_DIR/bin/setup-postgres" ]] || fail "bin/setup-postgres is not executable"
+command -v systemctl >/dev/null 2>&1 || fail "this bootstrap requires a systemd-based LXC"
+command -v apt-get >/dev/null 2>&1 || fail "this bootstrap currently supports apt-based LXC containers"
+
+if ! getent group "$SERVICE_GROUP" >/dev/null 2>&1; then
+  groupadd --system "$SERVICE_GROUP"
+fi
+if ! id "$SERVICE_USER" >/dev/null 2>&1; then
+  useradd --system --gid "$SERVICE_GROUP" --create-home --shell /usr/sbin/nologin "$SERVICE_USER"
+fi
+install -d -m 0750 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$LOG_DIR" "$LOCK_DIR"
+install -d -m 0750 -o root -g "$SERVICE_GROUP" /etc/threat-intel
+
+if ! command -v cron >/dev/null 2>&1; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update
+  apt-get install -y cron
+fi
+
+if [[ ! -x "$APP_DIR/venv/bin/python" ]]; then
+  if ! python3 -m venv "$APP_DIR/venv"; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y python3-venv
+    python3 -m venv "$APP_DIR/venv"
+  fi
+fi
+"$APP_DIR/venv/bin/pip" install --upgrade pip
+"$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
+
+postgres_args=(--app-dir "$APP_DIR" --service-user "$SERVICE_USER")
+if [[ "$install_postgresql" == true ]]; then
+  postgres_args+=(--install-postgresql)
+fi
+"$APP_DIR/bin/setup-postgres" "${postgres_args[@]}"
+
+chmod 0755 "$APP_DIR/bin/run-job" "$APP_DIR/bin/run-dashboard"
+install -m 0644 "$APP_DIR/deploy/cron.d/threat-intel" /etc/cron.d/threat-intel
+install -m 0644 "$APP_DIR/deploy/logrotate/threat-intel" /etc/logrotate.d/threat-intel
+install -m 0644 "$APP_DIR/deploy/systemd/threat-intel-dashboard.service" /etc/systemd/system/threat-intel-dashboard.service
+
+systemctl daemon-reload
+systemctl enable --now cron
+systemctl enable --now threat-intel-dashboard
+
+if [[ "$initial_sync" == true ]]; then
+  echo "Starting initial CISA KEV sync..."
+  runuser -u "$SERVICE_USER" -- "$APP_DIR/bin/run-job" cisa-kev
+  echo "Starting initial NVD sync (may take several minutes)..."
+  runuser -u "$SERVICE_USER" -- "$APP_DIR/bin/run-job" nvd
+  echo "Starting initial Krebs sync..."
+  runuser -u "$SERVICE_USER" -- "$APP_DIR/bin/run-job" krebs
+fi
+
+"$APP_DIR/venv/bin/python" -c '
+from urllib.request import urlopen
+with urlopen("http://127.0.0.1:8080/healthz", timeout=10) as response:
+    assert response.status == 200
+' || fail "dashboard service did not pass its health check; run: journalctl -u threat-intel-dashboard -n 100"
+
+echo "Threat Intel is running."
+echo "Dashboard health: http://127.0.0.1:8080/healthz"
+echo "Dashboard logs: journalctl -u threat-intel-dashboard -f"
+echo "Ingestion logs: $LOG_DIR"

@@ -4,6 +4,8 @@
 
 This service runs inside an LXC container and independently ingests CISA KEV data, NVD CVE updates, and Krebs on Security articles into PostgreSQL. It is designed for cron: every source is a bounded command, is safe to run again, writes a useful exit status, and cannot overlap with another run of the same source.
 
+For a standard Debian/Ubuntu systemd LXC, `bin/setup-and-start` performs the complete initial deployment. It creates the service user, sets up PostgreSQL and the schema, creates the virtual environment, enables cron and the dashboard, then optionally starts an initial sync. It must be run as root from `/opt/threat-intel`.
+
 ## Data flow
 
 ```

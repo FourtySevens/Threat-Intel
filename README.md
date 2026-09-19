@@ -12,6 +12,18 @@ Each command is idempotent and returns a non-zero exit status on failure, making
 
 Run these steps inside the container as an administrator. The scheduled commands run as the unprivileged `ti` account; PostgreSQL may be local or reachable through the `DATABASE_URL` host.
 
+For a new Debian/Ubuntu systemd LXC deployed at `/opt/threat-intel`, the all-in-one bootstrap is the recommended path:
+
+```bash
+cd /opt/threat-intel
+chmod 0755 bin/setup-and-start bin/setup-postgres
+./bin/setup-and-start
+```
+
+It creates the service account, provisions PostgreSQL, installs dependencies, enables cron and the dashboard, and runs the first source sync. Use `./bin/setup-and-start --no-initial-sync` when you want to start services without immediately downloading feeds.
+
+The manual sequence below remains useful for customized deployments.
+
 ```bash
 useradd --system --create-home --shell /usr/sbin/nologin ti
 install -d -m 0755 -o root -g root /opt/threat-intel

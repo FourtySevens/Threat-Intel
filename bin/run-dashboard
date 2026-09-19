@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-readonly APP_DIR="/opt/threat-intel"
+readonly APP_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$APP_DIR"
 exec "$APP_DIR/venv/bin/gunicorn" \
   --workers 2 --threads 4 --timeout 30 \
