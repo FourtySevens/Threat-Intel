@@ -1,0 +1,22 @@
+[Unit]
+Description=Threat Intel read-only search dashboard
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=ti
+Group=ti
+WorkingDirectory=/opt/threat-intel
+EnvironmentFile=/etc/threat-intel/threat-intel.env
+ExecStart=/opt/threat-intel/bin/run-dashboard
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/threat-intel
+
+[Install]
+WantedBy=multi-user.target

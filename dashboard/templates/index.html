@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Threat Intel search{% endblock %}
+{% block content %}
+<section class="hero">
+  <p class="eyebrow">Threat intelligence</p>
+  <h1>Search vulnerabilities and reporting</h1>
+  <p class="intro">CISA KEV, NVD CVE metadata, and collected security reporting in one place.</p>
+</section>
+
+<section class="metrics" aria-label="Database summary">
+  <div><span>{{ metrics.cve_count }}</span><small>CVEs</small></div>
+  <div><span>{{ metrics.kev_count }}</span><small>Known exploited</small></div>
+  <div><span>{{ metrics.high_critical_count }}</span><small>High or critical</small></div>
+  <div><span>{{ metrics.article_count }}</span><small>Articles</small></div>
+</section>
+
+<form class="search-panel" method="get" action="{{ url_for('index') }}">
+  <label class="query-field" for="q">Search CVE IDs, descriptions, and articles</label>
+  <div class="query-row">
+    <input id="q" name="q" type="search" value="{{ filters.query }}" placeholder="CVE-2026-1234, vendor, exploit…" autocomplete="off">
+    <button type="submit">Search</button>
+  </div>
+  <div class="filters">
+    <label>Severity
+      <select name="severity">
+        <option value="">Any severity</option>
+        {% for severity in filter_values.severities %}<option value="{{ severity }}" {% if filters.severity == severity %}selected{% endif %}>{{ severity }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Source
+      <select name="source">
+        <option value="">Any source</option>
+        {% for source in filter_values.sources %}<option value="{{ source }}" {% if filters.source == source %}selected{% endif %}>{{ source }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Exploitation
+      <select name="kev">
+        <option value="">All CVEs</option>
+        <option value="yes" {% if filters.kev == 'yes' %}selected{% endif %}>CISA KEV</option>
+        <option value="no" {% if filters.kev == 'no' %}selected{% endif %}>Not in KEV</option>
+      </select>
+    </label>
+  </div>
+</form>
+
+<section class="results-section" aria-labelledby="cve-results">
+  <div class="section-heading"><h2 id="cve-results">Vulnerabilities</h2><p>{{ total }} matching records</p></div>
+  {% if results %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>CVE</th><th>Severity</th><th>Score</th><th>Source</th><th>Summary</th><th>KEV</th></tr></thead>
+    <tbody>{% for cve in results %}<tr>
+      <td><a href="{{ url_for('cve_detail', cve_id=cve.cve_id) }}">{{ cve.cve_id }}</a></td>
+      <td><span class="severity severity-{{ cve.severity|lower if cve.severity else 'unknown' }}">{{ cve.severity or 'Unknown' }}</span></td>
+      <td>{{ cve.cvss_score if cve.cvss_score is not none else '—' }}</td>
+      <td>{{ cve.source or '—' }}</td>
+      <td class="summary">{{ cve.description or 'No description available.' }}</td>
+      <td>{% if cve.is_kev %}<span class="kev">Known exploited</span>{% else %}—{% endif %}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  <nav class="pagination" aria-label="Vulnerability pages">
+    {% if filters.page > 1 %}<a href="{{ url_for('index', q=filters.query, severity=filters.severity, source=filters.source, kev=filters.kev, page=filters.page - 1) }}">← Previous</a>{% endif %}
+    <span>Page {{ filters.page }} of {{ page_count }}</span>
+    {% if filters.page < page_count %}<a href="{{ url_for('index', q=filters.query, severity=filters.severity, source=filters.source, kev=filters.kev, page=filters.page + 1) }}">Next →</a>{% endif %}
+  </nav>
+  {% else %}<p class="empty">No vulnerabilities match these filters.</p>{% endif %}
+</section>
+
+{% if articles %}
+<section class="results-section" aria-labelledby="article-results">
+  <div class="section-heading"><h2 id="article-results">Related reporting</h2><p>Up to 10 matching articles</p></div>
+  <div class="article-list">{% for article in articles %}
+    <article><h3><a href="{{ url_for('article_detail', article_id=article.id) }}">{{ article.title }}</a></h3><p>{{ article.content[:280] }}{% if article.content|length > 280 %}…{% endif %}</p><small>{{ article.source }}{% if article.published_at %} · {{ article.published_at.strftime('%Y-%m-%d') }}{% endif %}</small></article>
+  {% endfor %}</div>
+</section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,35 @@
+threat-intel-scraper/
+├── README.md
+├── requirements.txt
+├── config/
+│   ├── settings.yaml
+│   └── sources.yaml
+├── scraper/
+│   ├── __init__.py
+│   ├── main.py
+│   ├── fetcher.py
+│   ├── parser.py
+│   ├── sources/
+│   │   ├── __init__.py
+│   │   ├── krebsonsecurity.py
+│   │   ├── sans_isc.py
+│   │   └── talos.py
+│   └── utils/
+│       ├── __init__.py
+│       ├── hashing.py
+│       ├── http.py
+│       └── text.py
+├── enrichment/
+│   ├── __init__.py
+│   ├── categorizer.py
+│   ├── cve_extractor.py
+│   └── ioc_extractor.py
+├── storage/
+│   ├── __init__.py
+│   ├── db.py
+│   ├── models.sql
+│   └── repository.py
+├── logs/
+│   └── scraper.log
+└── scripts/
+    └── run_scraper.sh

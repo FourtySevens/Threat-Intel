@@ -1,0 +1,90 @@
+/feeds/cisa_kev.py
+
+import requests
+
+CISA_KEV_URL = (
+    "https://www.cisa.gov/sites/default/files/feeds/"
+    "known_exploited_vulnerabilities.json"
+)
+
+def fetch_kev_feed():
+    resp = requests.get(CISA_KEV_URL, timout=15)
+    resp.raise_for_status()
+    return resp.json()["vulnerabilities"]
+
+/enrichment/kev_enricher.py
+
+from feeds.cisa_kev import fetch_kev_feed
+from enrichment.kev_normalizer import normalize_kev
+from storage.cve_repository import get_or_create_cve_stub
+from storage.kev_repository import upsert_kev_status
+
+def enrich_with_kev():
+    entries = fetch_kev_feed()
+
+    for entry in entries:
+        kev = normalize_kev(entry)
+
+        cve = get_or_create_cve_stub(kev["cve_id"])
+
+        upsert_kev_status(
+            cve_id=cve["id"],
+            date_added=kev["date_added"],
+            due_date=kev["due_date"],
+            required_action=kev["required_action"],
+            exploited=True
+        )
+
+/enrichment/kev_normalizer.py
+
+
+def normalize_kev(entry: dict) -> dict:
+    return {
+        "cve_ide": entry["cveID"],
+        "date_added": entry.get("dateAdded"),
+        "due_date": entry.get("dueDate"),
+        "required_action": entry.get("requiredAction"),
+        "exploited": True
+    }
+
+/storage/cve_repository.py
+
+def get_or_create_cve_stub(cve_id: str):
+    cve = find_cve_by_cve_id(cve_id)
+    if cve:
+        return cve
+
+    return insert_cve({
+        "cve_id": cve_id,
+        "description": "KEV-listed CVE (details pending)",
+        "cvss_score": None,
+        "severity": "UNKNOWN",
+        "source": "cisa",
+    })
+
+/storage/kev_repository
+
+def upsert_kev_status(
+    cve_id: int,
+    date_added,
+    due_date,
+    required_action,
+    exploited: bool
+):
+
+    query = """
+    INSERT INTO cve_kev (
+        cve_id, exploited, date_added, due_date,
+        required_action, updated_at
+    )
+    VALUES(%s, %s, %s, %s, %s, NOW())
+    ON CONFLICT (cve_id)
+    DO UPDATE SET
+        exploited = EXCLUDED.exploited,
+        date_dadded = EXCLUDED.date_added,
+        due_date = EXCLUDED.due_date,
+        required_action = EXCLUDED.required_action,
+        updated_at = NOW();
+    """
+
+    execute(query)

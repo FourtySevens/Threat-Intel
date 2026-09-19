@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ article.title }} · Threat Intel{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('index') }}">← Back to search</a>
+<article class="detail article-detail">
+  <p class="eyebrow">{{ article.source }}</p><h1>{{ article.title }}</h1>
+  <p class="metadata">{% if article.published_at %}{{ article.published_at.strftime('%Y-%m-%d %H:%M UTC') }} · {% endif %}<a href="{{ article.url }}" rel="noopener noreferrer" target="_blank">View original source ↗</a></p>
+  {% if article.tags %}<p class="tag-list">{% for tag in article.tags %}<span>{{ tag }}</span>{% endfor %}</p>{% endif %}
+  <div class="article-content">{{ article.content }}</div>
+</article>
+{% endblock %}

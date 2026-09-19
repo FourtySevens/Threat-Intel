@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+# Bootstrap PostgreSQL for the threat-intel LXC. Run as root.
+set -Eeuo pipefail
+
+readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly DEFAULT_APP_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+
+app_dir="$DEFAULT_APP_DIR"
+db_name="threatintel"
+db_role="ti_user"
+service_user="ti"
+env_file="/etc/threat-intel/threat-intel.env"
+install_postgresql=false
+replace_env=false
+db_password=""
+
+usage() {
+  cat <<'EOF'
+Usage: setup-postgres [options]
+
+Creates or updates the PostgreSQL database role and database, then applies the
+threat-intel schema as the application role.
+
+Options:
+  --database NAME             Database name (default: threatintel)
+  --role NAME                 PostgreSQL role (default: ti_user)
+  --service-user NAME         Linux account allowed to read the env file (default: ti)
+  --app-dir PATH              Repository deployment path (default: script parent)
+  --env-file PATH             App environment file (default: /etc/threat-intel/threat-intel.env)
+  --install-postgresql        Install PostgreSQL with apt when psql is absent
+  --write-env                 Update DATABASE_URL in an existing environment file
+  --password VALUE            Database password; avoid this option in shared shell history
+  -h, --help                  Show this help text
+
+When --password is omitted, the script securely prompts for it. The password
+is not passed to psql on the command line. Use a strong, unique password.
+EOF
+}
+
+fail() {
+  echo "setup-postgres: $*" >&2
+  exit 1
+}
+
+validate_identifier() {
+  [[ "$1" =~ ^[a-z_][a-z0-9_]{0,62}$ ]] || fail "invalid PostgreSQL identifier: $1"
+}
+
+while (($#)); do
+  case "$1" in
+    --database) db_name="${2:?missing database name}"; shift 2 ;;
+    --role) db_role="${2:?missing role name}"; shift 2 ;;
+    --service-user) service_user="${2:?missing service user}"; shift 2 ;;
+    --app-dir) app_dir="${2:?missing application directory}"; shift 2 ;;
+    --env-file) env_file="${2:?missing environment file}"; shift 2 ;;
+    --install-postgresql) install_postgresql=true; shift ;;
+    --write-env) replace_env=true; shift ;;
+    --password) db_password="${2:?missing password}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "unknown option: $1 (run with --help)" ;;
+  esac
+done
+
+[[ $EUID -eq 0 ]] || fail "run this script as root"
+validate_identifier "$db_name"
+validate_identifier "$db_role"
+id "$service_user" >/dev/null 2>&1 || fail "Linux service user does not exist: $service_user"
+schema_path="$app_dir/storage/schema.sql"
+[[ -r "$schema_path" ]] || fail "schema file is not readable: $schema_path"
+
+if ! command -v psql >/dev/null 2>&1; then
+  if [[ "$install_postgresql" != true ]]; then
+    fail "psql is not installed; rerun with --install-postgresql"
+  fi
+  command -v apt-get >/dev/null 2>&1 || fail "automatic installation currently supports apt-based containers only"
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update
+  apt-get install -y postgresql
+fi
+
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl enable --now postgresql
+fi
+
+if [[ -z "$db_password" ]]; then
+  read -r -s -p "PostgreSQL password for $db_role: " db_password
+  echo
+  [[ -n "$db_password" ]] || fail "password cannot be empty"
+  read -r -s -p "Confirm password: " confirmation
+  echo
+  [[ "$db_password" == "$confirmation" ]] || fail "passwords do not match"
+  unset confirmation
+fi
+
+# psql's \getenv reads this only inside the privileged client process. It keeps
+# the password out of SQL text, command arguments, and shell history.
+export TI_DB_PASSWORD="$db_password"
+trap 'unset TI_DB_PASSWORD db_password' EXIT
+
+as_postgres() {
+  runuser -u postgres --preserve-environment -- psql -X -v ON_ERROR_STOP=1 "$@"
+}
+
+as_postgres --dbname=postgres --set=db_name="$db_name" --set=db_role="$db_role" <<'SQL'
+\getenv db_password TI_DB_PASSWORD
+SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'db_role', :'db_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'db_role')
+\gexec
+ALTER ROLE :"db_role" WITH LOGIN PASSWORD :'db_password';
+SELECT format('CREATE DATABASE %I OWNER %I ENCODING ''UTF8'' TEMPLATE template0', :'db_name', :'db_role')
+WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'db_name')
+\gexec
+SQL
+
+database_encoding="$(as_postgres --tuples-only --no-align --dbname=postgres \
+  -c "SELECT pg_encoding_to_char(encoding) FROM pg_database WHERE datname = '$db_name';")"
+if [[ "$database_encoding" != "UTF8" ]]; then
+  echo "Warning: existing database $db_name uses $database_encoding, not UTF8." >&2
+  echo "The application forces its client connection to UTF8, but migrate to a UTF8 database for full validation and locale-aware text handling." >&2
+fi
+
+# Execute the migration as the application role so it owns the created tables.
+as_postgres --dbname="$db_name" --single-transaction \
+  -c "SET ROLE \"$db_role\";" \
+  -f "$schema_path"
+
+if [[ -e "$env_file" && "$replace_env" != true ]]; then
+  echo "Database is ready. Existing environment file was left unchanged: $env_file"
+  echo "Use --write-env only if you intend to update DATABASE_URL."
+  exit 0
+fi
+
+env_dir="$(dirname -- "$env_file")"
+install -d -m 0750 -o root -g "$service_user" "$env_dir"
+encoded_password="$(python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["TI_DB_PASSWORD"], safe=""))')"
+tmp_env="$(mktemp "$env_dir/.threat-intel.env.XXXXXX")"
+trap 'rm -f -- "$tmp_env"; unset TI_DB_PASSWORD db_password' EXIT
+if [[ -e "$env_file" ]]; then
+  # Preserve non-database settings (for example NVD_API_KEY) during a password rotation.
+  sed '/^[[:space:]]*DATABASE_URL=/d' "$env_file" > "$tmp_env"
+fi
+printf 'DATABASE_URL=postgresql://%s:%s@127.0.0.1:5432/%s\n' \
+  "$db_role" "$encoded_password" "$db_name" >> "$tmp_env"
+install -m 0640 -o root -g "$service_user" "$tmp_env" "$env_file"
+
+echo "Database, role, schema, and environment file are ready."
+echo "Environment file: $env_file"

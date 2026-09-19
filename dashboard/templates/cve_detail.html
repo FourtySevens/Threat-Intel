@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{{ cve.cve_id }} · Threat Intel{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('index') }}">← Back to search</a>
+<article class="detail">
+  <div class="detail-heading"><div><p class="eyebrow">Vulnerability</p><h1>{{ cve.cve_id }}</h1></div>
+    <div>{% if cve.is_kev %}<span class="kev">CISA known exploited</span>{% endif %}<span class="severity severity-{{ cve.severity|lower if cve.severity else 'unknown' }}">{{ cve.severity or 'Unknown' }}</span></div>
+  </div>
+  <p class="description">{{ cve.description or 'No description available.' }}</p>
+  <dl class="details-grid">
+    <div><dt>CVSS score</dt><dd>{{ cve.cvss_score if cve.cvss_score is not none else '—' }}</dd></div>
+    <div><dt>Attack vector</dt><dd>{{ cve.attack_vector or '—' }}</dd></div>
+    <div><dt>Exploitability</dt><dd>{{ cve.exploitability_score if cve.exploitability_score is not none else '—' }}</dd></div>
+    <div><dt>Source</dt><dd>{{ cve.source or '—' }}</dd></div>
+    <div><dt>Published</dt><dd>{{ cve.published_at.strftime('%Y-%m-%d %H:%M UTC') if cve.published_at else '—' }}</dd></div>
+    <div><dt>Last modified</dt><dd>{{ cve.last_modified_at.strftime('%Y-%m-%d %H:%M UTC') if cve.last_modified_at else '—' }}</dd></div>
+    {% if cve.is_kev %}<div><dt>KEV added</dt><dd>{{ cve.date_added or '—' }}</dd></div><div><dt>KEV due date</dt><dd>{{ cve.due_date or '—' }}</dd></div>{% endif %}
+  </dl>
+  {% if cve.cvss_vector %}<section class="detail-section"><h2>CVSS vector</h2><code>{{ cve.cvss_vector }}</code></section>{% endif %}
+  {% if cve.required_action %}<section class="detail-section"><h2>Required action</h2><p>{{ cve.required_action }}</p></section>{% endif %}
+</article>
+{% endblock %}

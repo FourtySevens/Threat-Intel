@@ -1,0 +1,18 @@
+threatintel=# CREATE FUNCTION insert_notify() RETURNS trigger AS $$
+DECLARE
+payload JSON;
+BEGIN
+payload := json_build_object(
+'id', NEW.ID,
+'item 1', NEW.field1,
+'item 2', NEW.field2,
+'item 3, CURRENT_TIMESTAMP);
+PERFORM pg_notify('updates', payload::text);
+RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+ERROR:  unterminated quoted string at or near "', payload::text);
+RETURN NEW;
+END;
+"
+LINE 10: PERFORM pg_notify('updates', payload::text);

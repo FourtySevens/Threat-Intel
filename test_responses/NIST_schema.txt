@@ -1,0 +1,17 @@
+nist_cve TABLE schema
+
+cve_id varchar [PK],
+source varchar,
+published timestamp,
+last_modified timestamp,
+cvss_score float,
+access_vector varchar,
+severity varchar,
+exploitability varchar,
+description varchar,
+
+INSERT INTO nist_cve (
+	cve_id, source, published,
+	last_modified, cvss_score, access_vector,
+	severity, exploitability, description)
+	VALUES (1,2,3,4,5,6,7,8,9)

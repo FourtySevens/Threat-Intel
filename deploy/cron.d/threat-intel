@@ -1,0 +1,8 @@
+# Install as /etc/cron.d/threat-intel. The final newline is required by cron.
+# Jobs are offset so their database and network load does not overlap by default.
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+17 */6 * * * ti /opt/threat-intel/bin/run-job cisa-kev
+29 */6 * * * ti /opt/threat-intel/bin/run-job nvd
+11,41 * * * * ti /opt/threat-intel/bin/run-job krebs
