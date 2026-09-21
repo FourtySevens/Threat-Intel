@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+# Remove all runtime state created by Threat Intel setup. Run as root.
+set -Eeuo pipefail
+
+db_name="threatintel"
+db_role="ti_user"
+service_user="ti"
+service_group="ti"
+env_file="/etc/threat-intel/threat-intel.env"
+cron_file="/etc/cron.d/threat-intel"
+logrotate_file="/etc/logrotate.d/threat-intel"
+unit_file="/etc/systemd/system/threat-intel-dashboard.service"
+log_dir="/var/log/threat-intel"
+lock_dir="/var/lock/threat-intel"
+assume_yes=false
+
+usage() {
+  cat <<'EOF'
+Usage: teardown [options]
+
+Permanently removes Threat Intel runtime state:
+  - PostgreSQL database and application role
+  - dashboard systemd unit, cron schedule, and logrotate configuration
+  - /etc/threat-intel credentials, project logs, and lock files
+  - the ti Linux service account and group (when no longer in use)
+
+The application directory and PostgreSQL packages/clusters are intentionally
+preserved. They may be shared with other services and require separate review.
+
+Options:
+  --database NAME       Database to drop (default: threatintel)
+  --role NAME           PostgreSQL role to drop (default: ti_user)
+  --service-user NAME   Linux account to remove (default: ti)
+  --yes                 Skip the interactive DELETE confirmation
+  -h, --help            Show this help text
+EOF
+}
+
+fail() {
+  echo "teardown: $*" >&2
+  exit 1
+}
+
+validate_identifier() {
+  [[ "$1" =~ ^[a-z_][a-z0-9_]{0,62}$ ]] || fail "invalid PostgreSQL identifier: $1"
+}
+
+while (($#)); do
+  case "$1" in
+    --database) db_name="${2:?missing database name}"; shift 2 ;;
+    --role) db_role="${2:?missing role name}"; shift 2 ;;
+    --service-user) service_user="${2:?missing service user}"; service_group="$service_user"; shift 2 ;;
+    --yes) assume_yes=true; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "unknown option: $1 (run with --help)" ;;
+  esac
+done
+
+[[ $EUID -eq 0 ]] || fail "run this script as root"
+validate_identifier "$db_name"
+validate_identifier "$db_role"
+
+if [[ "$assume_yes" != true ]]; then
+  echo "This permanently drops PostgreSQL database '$db_name' and role '$db_role'."
+  echo "It also removes the '$service_user' Linux account, dashboard service, cron job, credentials, logs, and locks."
+  read -r -p "Type DELETE to continue: " confirmation
+  [[ "$confirmation" == "DELETE" ]] || fail "cancelled"
+fi
+
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl disable --now threat-intel-dashboard.service 2>/dev/null || true
+fi
+rm -f -- "$unit_file" "$cron_file" "$logrotate_file"
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl daemon-reload
+fi
+
+if command -v psql >/dev/null 2>&1 && id postgres >/dev/null 2>&1; then
+  runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 --dbname=postgres \
+    --set=db_name="$db_name" --set=db_role="$db_role" <<'SQL'
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
+WHERE datname = :'db_name' AND pid <> pg_backend_pid();
+DROP DATABASE IF EXISTS :"db_name";
+DROP ROLE IF EXISTS :"db_role";
+SQL
+else
+  echo "Warning: PostgreSQL client or postgres account not found; database and role were not removed." >&2
+fi
+
+rm -f -- "$env_file"
+rmdir /etc/threat-intel 2>/dev/null || true
+rm -rf -- "$log_dir" "$lock_dir"
+
+if id "$service_user" >/dev/null 2>&1; then
+  userdel --remove "$service_user" || fail "could not remove Linux user $service_user"
+fi
+if getent group "$service_group" >/dev/null 2>&1; then
+  groupdel "$service_group" 2>/dev/null || \
+    echo "Warning: Linux group $service_group remains because another account still uses it." >&2
+fi
+
+echo "Threat Intel runtime state has been removed."
+echo "Preserved: application files and PostgreSQL packages/clusters."

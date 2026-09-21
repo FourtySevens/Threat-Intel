@@ -80,3 +80,9 @@ python -m scraper.jobs krebs
 ```
 
 The complete LXC installation commands are in `README.md`.
+
+## Teardown
+
+`bin/teardown` is the inverse of the runtime setup. It stops and removes the Threat Intel dashboard unit, removes its cron and logrotate files, terminates connections to and drops the configured project database, drops the project PostgreSQL role, removes credentials/logs/locks, then removes the `ti` Linux user and group. It requires root and an explicit `DELETE` confirmation unless `--yes` is supplied for deliberate automation.
+
+It does not remove `/opt/threat-intel` or PostgreSQL packages/clusters. Those targets may be shared and require separate review.

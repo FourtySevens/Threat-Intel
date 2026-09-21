@@ -25,7 +25,8 @@ It creates the service account, provisions PostgreSQL, installs dependencies, en
 The manual sequence below remains useful for customized deployments.
 
 ```bash
-useradd --system --create-home --shell /usr/sbin/nologin ti
+groupadd --system ti
+useradd --system --gid ti --create-home --shell /usr/sbin/nologin ti
 install -d -m 0755 -o root -g root /opt/threat-intel
 install -d -m 0750 -o ti -g ti /var/log/threat-intel /var/lock/threat-intel
 # Deploy this repository to /opt/threat-intel as root, then create its virtual environment:
@@ -95,3 +96,13 @@ python -m scraper.jobs krebs
 ```
 
 Configuration is documented in `.env.example`. Cron output is one JSON object per line by default, so a log collector can index timestamps, source counts, and exceptions. NVD uses 2,000-record pages, retries transient failures, honours `Retry-After`, and defaults to a conservative 6.5-second inter-page delay without an API key. Its API request window is capped at 120 days; if the job has been offline longer it resumes through consecutive safe windows.
+
+## Teardown
+
+To permanently remove this deployment's runtime state, run:
+
+```bash
+sudo /opt/threat-intel/bin/teardown
+```
+
+The script requires typing `DELETE` before it drops the `threatintel` database and `ti_user` PostgreSQL role. It also removes the `ti` Linux account, dashboard unit, cron schedule, credentials, logs, and locks. It intentionally preserves the application files and PostgreSQL packages/clusters because they may be shared. Use `--yes` only for a deliberate automated removal.
