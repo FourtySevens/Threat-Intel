@@ -1,5 +1,5 @@
 from storage.db import get_conn
-from scraper.utils.hashing import content_hash
+from scraper.utils.hashing import canonical_url, content_hash
 
 def save_article(article: dict) -> int | None:
     """
@@ -15,14 +15,15 @@ def save_article(article: dict) -> int | None:
         with conn:
             with conn.cursor() as cur:
                 # Compute hash for deduplication
-                h = content_hash(article["content"])
+                normalized_url = canonical_url(article["url"])
+                h = content_hash(f"{article['title'].strip().lower()}\n{article['content'].strip()}")
 
                 # Insert article (Postgres enforces uniqueness)
                 cur.execute("""
                     INSERT INTO articles
-                    (title, url, source, published_at, content, content_hash, rss_feed_id)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (content_hash) DO NOTHING
+                    (title, url, source, published_at, content, content_hash, rss_feed_id, canonical_url)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT DO NOTHING
                     RETURNING id
                 """, (
                     article["title"],
@@ -32,6 +33,7 @@ def save_article(article: dict) -> int | None:
                     article["content"],
                     h,
                     article.get("rss_feed_id"),
+                    normalized_url,
                 ))
 
                 row = cur.fetchone()

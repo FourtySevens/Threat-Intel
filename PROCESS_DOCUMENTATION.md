@@ -42,6 +42,8 @@ Fetches the front article list, extracts article text and CVE/category tags, and
 
 Fetches enabled user-managed RSS and Atom feeds stored in `rss_feeds`. The dashboard's **Articles & RSS** page adds or re-enables a feed; the hourly cron job retrieves it, enriches entries with CVE/category tags, and deduplicates articles by content hash. Per-feed fetch errors are persisted for review on the same page while other feeds continue processing.
 
+The curated `seed-rss` command initializes the first high-signal catalogue: CISA Advisories and MSRC as priority 1, DFIR Report/Unit 42/Talos/SANS as priority 2, and BleepingComputer as priority 3. Each source has `source_type`, `reliability`, `default_priority`, `last_success_at`, and `failure_count` metadata. RSS stores a short excerpt and original URL only; canonical URL matching precedes normalized title/excerpt hashing for deduplication.
+
 ## Database initialization and migration
 
 Run `bin/setup-postgres` as root to create the role/database, apply the schema as the application role, and write the initial environment file. It can install PostgreSQL on an apt-based LXC when passed `--install-postgresql`. On a pre-provisioned server, omit that flag. `storage/schema.sql` is idempotent and additive: it creates missing tables and adds columns required by the NVD path to an existing `cve` table. It does not destroy or truncate data.

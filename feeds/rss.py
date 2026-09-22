@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from time import mktime
+from calendar import timegm
 
 import feedparser
+from bs4 import BeautifulSoup
 
 from config.settings import Settings
 from feeds.http import build_session, timeout
@@ -13,7 +14,12 @@ from feeds.http import build_session, timeout
 
 def _published(entry) -> datetime | None:
     value = entry.get("published_parsed") or entry.get("updated_parsed")
-    return datetime.fromtimestamp(mktime(value), timezone.utc) if value else None
+    return datetime.fromtimestamp(timegm(value), timezone.utc) if value else None
+
+
+def _excerpt(value: str, limit: int = 2000) -> str:
+    text = " ".join(BeautifulSoup(value, "html.parser").get_text(" ", strip=True).split())
+    return text[:limit].rstrip()
 
 
 def fetch_feed(settings: Settings, feed: dict) -> list[dict]:
@@ -37,7 +43,8 @@ def fetch_feed(settings: Settings, feed: dict) -> list[dict]:
             "url": url,
             "source": feed["name"],
             "published_at": _published(entry),
-            "content": entry.get("summary") or entry.get("description") or title,
+            # Store an excerpt and URL, not a publisher's full article body.
+            "content": _excerpt(entry.get("summary") or entry.get("description") or title),
             "tags": [],
             "rss_feed_id": feed["id"],
         })

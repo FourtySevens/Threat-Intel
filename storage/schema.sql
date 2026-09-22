@@ -48,12 +48,25 @@ CREATE TABLE IF NOT EXISTS rss_feeds (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     feed_url TEXT NOT NULL UNIQUE,
+    source_type VARCHAR(32) NOT NULL DEFAULT 'research',
+    reliability VARCHAR(16) NOT NULL DEFAULT 'medium',
+    default_priority SMALLINT NOT NULL DEFAULT 3,
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     last_fetched_at TIMESTAMPTZ,
+    last_success_at TIMESTAMPTZ,
+    last_failure_at TIMESTAMPTZ,
+    failure_count INTEGER NOT NULL DEFAULT 0,
     last_error TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE rss_feeds ADD COLUMN IF NOT EXISTS source_type VARCHAR(32) NOT NULL DEFAULT 'research';
+ALTER TABLE rss_feeds ADD COLUMN IF NOT EXISTS reliability VARCHAR(16) NOT NULL DEFAULT 'medium';
+ALTER TABLE rss_feeds ADD COLUMN IF NOT EXISTS default_priority SMALLINT NOT NULL DEFAULT 3;
+ALTER TABLE rss_feeds ADD COLUMN IF NOT EXISTS last_success_at TIMESTAMPTZ;
+ALTER TABLE rss_feeds ADD COLUMN IF NOT EXISTS last_failure_at TIMESTAMPTZ;
+ALTER TABLE rss_feeds ADD COLUMN IF NOT EXISTS failure_count INTEGER NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS articles (
     id BIGSERIAL PRIMARY KEY,
@@ -63,11 +76,14 @@ CREATE TABLE IF NOT EXISTS articles (
     published_at TIMESTAMPTZ,
     content TEXT NOT NULL,
     content_hash CHAR(64) NOT NULL UNIQUE,
+    canonical_url TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS rss_feed_id BIGINT REFERENCES rss_feeds(id) ON DELETE SET NULL;
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS canonical_url TEXT;
+UPDATE articles SET canonical_url = url WHERE canonical_url IS NULL;
 
 CREATE TABLE IF NOT EXISTS tags (
     id BIGSERIAL PRIMARY KEY,
@@ -88,3 +104,5 @@ CREATE TABLE IF NOT EXISTS job_state (
 
 CREATE INDEX IF NOT EXISTS idx_articles_source_published_at ON articles(source, published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_articles_rss_feed_id ON articles(rss_feed_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_articles_canonical_url ON articles(canonical_url) WHERE canonical_url IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_rss_feeds_health ON rss_feeds(enabled, failure_count DESC, last_success_at);

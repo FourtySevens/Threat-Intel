@@ -84,6 +84,7 @@ if [[ "$install_postgresql" == true ]]; then
   postgres_args+=(--install-postgresql)
 fi
 "$APP_DIR/bin/setup-postgres" "${postgres_args[@]}"
+runuser -u "$SERVICE_USER" -- bash -c "set -a; source /etc/threat-intel/threat-intel.env; set +a; cd '$APP_DIR'; '$APP_DIR/venv/bin/python' -m scraper.jobs seed-rss"
 
 chmod 0755 "$APP_DIR/bin/run-job" "$APP_DIR/bin/run-dashboard"
 install -m 0644 "$APP_DIR/deploy/cron.d/threat-intel" /etc/cron.d/threat-intel

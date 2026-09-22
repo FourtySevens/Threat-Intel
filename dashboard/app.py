@@ -65,12 +65,20 @@ def create_app() -> Flask:
         if request.method == "POST":
             name = request.form.get("name", "").strip()[:255]
             feed_url = request.form.get("feed_url", "").strip()[:2048]
-            if not name or not feed_url.startswith(("https://", "http://")):
+            source_type = request.form.get("source_type", "research")
+            reliability = request.form.get("reliability", "medium")
+            try:
+                default_priority = int(request.form.get("default_priority", "3"))
+            except ValueError:
+                default_priority = 0
+            if (not name or not feed_url.startswith(("https://", "http://")) or
+                    source_type not in {"advisory", "research", "news", "other"} or
+                    reliability not in {"high", "medium", "low"} or default_priority not in {1, 2, 3}):
                 message = "Provide a feed name and an http(s) RSS or Atom URL."
             else:
                 write_conn = get_conn()
                 try:
-                    add_rss_feed(write_conn, name, feed_url)
+                    add_rss_feed(write_conn, name, feed_url, source_type, reliability, default_priority)
                 finally:
                     write_conn.close()
                 return redirect(url_for("articles", added="1"))

@@ -111,10 +111,10 @@ def search_articles(conn, query: str) -> list[dict]:
         return _rows(cur)
 
 
-def add_rss_feed(conn, name: str, feed_url: str) -> None:
+def add_rss_feed(conn, name: str, feed_url: str, source_type: str, reliability: str, default_priority: int) -> None:
     from storage.rss_repository import add_feed
 
-    add_feed(conn, name=name, feed_url=feed_url)
+    add_feed(conn, name=name, feed_url=feed_url, source_type=source_type, reliability=reliability, default_priority=default_priority)
 
 
 def get_cve(conn, cve_id: str) -> dict | None:

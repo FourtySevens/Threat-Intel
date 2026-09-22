@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from config.settings import Settings, get_settings
+from config.rss_seeds import RSS_SEEDS
 from enrichment.kev_enricher import enrich_with_kev
 from enrichment.nvd_normalizer import normalize_nvd
 from enrichment.rss_enricher import ingest_rss_feeds
@@ -18,6 +19,7 @@ from scraper.sources.krebsonsecurity import run as run_krebs
 from storage.cve_repository import upsert_nvd_records
 from storage.db import get_conn
 from storage.state_repository import get_last_successful_at, set_last_successful_at
+from storage.rss_repository import add_feed
 
 LOGGER = logging.getLogger(__name__)
 NVD_JOB_NAME = "nvd"
@@ -105,9 +107,21 @@ def run_nvd(settings: Settings) -> int:
     return total
 
 
+def seed_rss_feeds() -> int:
+    """Add/update the curated initial feed catalogue without duplicate rows."""
+    conn = get_conn()
+    try:
+        for feed in RSS_SEEDS:
+            add_feed(conn, **feed)
+    finally:
+        conn.close()
+    LOGGER.info("RSS feed catalogue seeded: %s feeds", len(RSS_SEEDS))
+    return len(RSS_SEEDS)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run one threat-intel ingestion job")
-    parser.add_argument("job", choices=("init-db", "cisa-kev", "nvd", "krebs", "rss"))
+    parser.add_argument("job", choices=("init-db", "cisa-kev", "nvd", "krebs", "rss", "seed-rss"))
     return parser
 
 
@@ -124,6 +138,8 @@ def main(argv: list[str] | None = None) -> int:
             run_nvd(settings)
         elif args.job == "rss":
             ingest_rss_feeds(settings)
+        elif args.job == "seed-rss":
+            seed_rss_feeds()
         else:
             run_krebs(settings)
     except KeyboardInterrupt:

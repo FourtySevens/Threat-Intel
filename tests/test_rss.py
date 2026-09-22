@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 from config.settings import Settings
 from feeds.rss import fetch_feed
+from scraper.utils.hashing import canonical_url
 
 
 class RssFeedTests(unittest.TestCase):
@@ -23,3 +24,9 @@ class RssFeedTests(unittest.TestCase):
         self.assertEqual(records[0]["rss_feed_id"], 3)
         self.assertEqual(records[0]["url"], "https://example.org/a")
         self.assertEqual(records[0]["content"], "Text")
+
+    def test_canonical_url_removes_tracking_parameters_and_fragments(self):
+        self.assertEqual(
+            canonical_url("HTTPS://Example.org/post?utm_source=rss&id=7#section"),
+            "https://example.org/post?id=7",
+        )
