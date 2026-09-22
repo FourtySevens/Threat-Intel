@@ -38,6 +38,10 @@ The NVD API window is limited to 120 days. If the LXC has been down longer, the 
 
 Fetches the front article list, extracts article text and CVE/category tags, and inserts only new content hashes. It creates tags before attaching them, so a clean database is supported. Article hashes and URL uniqueness make repeated cron runs harmless.
 
+### `rss`
+
+Fetches enabled user-managed RSS and Atom feeds stored in `rss_feeds`. The dashboard's **Articles & RSS** page adds or re-enables a feed; the hourly cron job retrieves it, enriches entries with CVE/category tags, and deduplicates articles by content hash. Per-feed fetch errors are persisted for review on the same page while other feeds continue processing.
+
 ## Database initialization and migration
 
 Run `bin/setup-postgres` as root to create the role/database, apply the schema as the application role, and write the initial environment file. It can install PostgreSQL on an apt-based LXC when passed `--install-postgresql`. On a pre-provisioned server, omit that flag. `storage/schema.sql` is idempotent and additive: it creates missing tables and adds columns required by the NVD path to an existing `cve` table. It does not destroy or truncate data.
@@ -47,6 +51,7 @@ The principal tables are:
 - `cve`: canonical CVE metadata from NVD, plus records initially discovered via KEV.
 - `cve_kev`: one CISA KEV status per CVE.
 - `articles`, `tags`, and `article_tags`: content-source storage.
+- `rss_feeds`: user-managed RSS/Atom source configuration and fetch state.
 - `job_state`: successful-ingestion watermarks.
 
 ## Configuration and secrets

@@ -8,12 +8,12 @@ readonly LOG_DIR="/var/log/threat-intel"
 readonly LOCK_DIR="/var/lock/threat-intel"
 
 if [[ $# -ne 1 ]]; then
-  echo "usage: $0 {cisa-kev|nvd|krebs}" >&2
+  echo "usage: $0 {cisa-kev|nvd|krebs|rss}" >&2
   exit 64
 fi
 
 case "$1" in
-  cisa-kev|nvd|krebs) ;;
+  cisa-kev|nvd|krebs|rss) ;;
   *) echo "unknown job: $1" >&2; exit 64 ;;
 esac
 

@@ -6,3 +6,4 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 17 */6 * * * ti /opt/threat-intel/bin/run-job cisa-kev
 29 */6 * * * ti /opt/threat-intel/bin/run-job nvd
 11,41 * * * * ti /opt/threat-intel/bin/run-job krebs
+47 * * * * ti /opt/threat-intel/bin/run-job rss

@@ -12,6 +12,7 @@ from pathlib import Path
 from config.settings import Settings, get_settings
 from enrichment.kev_enricher import enrich_with_kev
 from enrichment.nvd_normalizer import normalize_nvd
+from enrichment.rss_enricher import ingest_rss_feeds
 from feeds.nvd import fetch_modified_cves
 from scraper.sources.krebsonsecurity import run as run_krebs
 from storage.cve_repository import upsert_nvd_records
@@ -106,7 +107,7 @@ def run_nvd(settings: Settings) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run one threat-intel ingestion job")
-    parser.add_argument("job", choices=("init-db", "cisa-kev", "nvd", "krebs"))
+    parser.add_argument("job", choices=("init-db", "cisa-kev", "nvd", "krebs", "rss"))
     return parser
 
 
@@ -121,6 +122,8 @@ def main(argv: list[str] | None = None) -> int:
             enrich_with_kev(settings)
         elif args.job == "nvd":
             run_nvd(settings)
+        elif args.job == "rss":
+            ingest_rss_feeds(settings)
         else:
             run_krebs(settings)
     except KeyboardInterrupt:

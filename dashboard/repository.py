@@ -96,21 +96,25 @@ def search_cves(conn, filters: SearchFilters) -> tuple[list[dict], int]:
 
 
 def search_articles(conn, query: str) -> list[dict]:
-    if not query:
-        return []
     value = f"%{query}%"
     with conn.cursor() as cur:
         cur.execute(
             """
             SELECT id, title, url, source, published_at, content
             FROM articles
-            WHERE title ILIKE %s OR content ILIKE %s
+            WHERE (%s = '' OR title ILIKE %s OR content ILIKE %s)
             ORDER BY published_at DESC NULLS LAST, id DESC
             LIMIT 10
             """,
-            (value, value),
+            (query, value, value),
         )
         return _rows(cur)
+
+
+def add_rss_feed(conn, name: str, feed_url: str) -> None:
+    from storage.rss_repository import add_feed
+
+    add_feed(conn, name=name, feed_url=feed_url)
 
 
 def get_cve(conn, cve_id: str) -> dict | None:

@@ -5,10 +5,12 @@ from __future__ import annotations
 import logging
 from math import ceil
 
-from flask import Flask, abort, g, render_template, request
+from flask import Flask, abort, g, redirect, render_template, request, url_for
 
 from dashboard.db import get_readonly_conn
-from dashboard.repository import PAGE_SIZE, SearchFilters, get_article, get_cve, get_filter_values, get_metrics, search_articles, search_cves
+from dashboard.repository import PAGE_SIZE, SearchFilters, add_rss_feed, get_article, get_cve, get_filter_values, get_metrics, search_articles, search_cves
+from storage.db import get_conn
+from storage.rss_repository import list_feeds
 
 LOGGER = logging.getLogger(__name__)
 
@@ -52,9 +54,35 @@ def create_app() -> Flask:
             filter_values=get_filter_values(conn),
             filters=filters,
             results=results,
-            articles=search_articles(conn, filters.query),
+            articles=search_articles(conn, filters.query) if filters.query else [],
             total=total,
             page_count=max(1, ceil(total / PAGE_SIZE)),
+        )
+
+    @app.route("/articles", methods=("GET", "POST"))
+    def articles():
+        message = None
+        if request.method == "POST":
+            name = request.form.get("name", "").strip()[:255]
+            feed_url = request.form.get("feed_url", "").strip()[:2048]
+            if not name or not feed_url.startswith(("https://", "http://")):
+                message = "Provide a feed name and an http(s) RSS or Atom URL."
+            else:
+                write_conn = get_conn()
+                try:
+                    add_rss_feed(write_conn, name, feed_url)
+                finally:
+                    write_conn.close()
+                return redirect(url_for("articles", added="1"))
+        query = request.args.get("q", "").strip()[:200]
+        conn = _conn()
+        return render_template(
+            "articles.html",
+            articles=search_articles(conn, query),
+            feeds=list_feeds(conn),
+            query=query,
+            message=message,
+            added=request.args.get("added") == "1",
         )
 
     @app.get("/cves/<cve_id>")

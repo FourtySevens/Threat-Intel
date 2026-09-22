@@ -20,8 +20,8 @@ def save_article(article: dict) -> int | None:
                 # Insert article (Postgres enforces uniqueness)
                 cur.execute("""
                     INSERT INTO articles
-                    (title, url, source, published_at, content, content_hash)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    (title, url, source, published_at, content, content_hash, rss_feed_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (content_hash) DO NOTHING
                     RETURNING id
                 """, (
@@ -30,7 +30,8 @@ def save_article(article: dict) -> int | None:
                     article["source"],
                     article.get("published_at"),
                     article["content"],
-                    h
+                    h,
+                    article.get("rss_feed_id"),
                 ))
 
                 row = cur.fetchone()

@@ -63,6 +63,8 @@ systemctl reload cron
 
 The dashboard is a read-only Flask application that searches CVE metadata, CISA KEV status, and collected articles. It binds to `127.0.0.1:8080` by default, so it is not exposed outside the LXC without an intentional reverse proxy or SSH tunnel.
 
+The **Articles & RSS** page lets an authorized dashboard user add individual RSS or Atom URLs. The hourly `rss` cron job ingests enabled feeds and records any feed-specific error on that page.
+
 ```bash
 install -m 0644 deploy/systemd/threat-intel-dashboard.service /etc/systemd/system/threat-intel-dashboard.service
 chmod 0755 /opt/threat-intel/bin/run-dashboard
@@ -93,6 +95,7 @@ python -m scraper.jobs init-db
 python -m scraper.jobs cisa-kev
 python -m scraper.jobs nvd
 python -m scraper.jobs krebs
+python -m scraper.jobs rss
 ```
 
 Configuration is documented in `.env.example`. Cron output is one JSON object per line by default, so a log collector can index timestamps, source counts, and exceptions. NVD uses 2,000-record pages, retries transient failures, honours `Retry-After`, and defaults to a conservative 6.5-second inter-page delay without an API key. Its API request window is capped at 120 days; if the job has been offline longer it resumes through consecutive safe windows.

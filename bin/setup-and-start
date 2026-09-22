@@ -101,6 +101,8 @@ if [[ "$initial_sync" == true ]]; then
   runuser -u "$SERVICE_USER" -- "$APP_DIR/bin/run-job" nvd
   echo "Starting initial Krebs sync..."
   runuser -u "$SERVICE_USER" -- "$APP_DIR/bin/run-job" krebs
+  echo "Starting initial RSS sync..."
+  runuser -u "$SERVICE_USER" -- "$APP_DIR/bin/run-job" rss
 fi
 
 "$APP_DIR/venv/bin/python" -c '
